@@ -4,7 +4,7 @@ namespace Expression\AST;
 
 use Expression\Token;
 
-class ASTOperator extends ASTNode
+class ASTBinaryOperator extends ASTNode
 {
     public function __construct(Token $operator, ASTNode $leftOperand, ASTNode $rightOperand)
     {

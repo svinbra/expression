@@ -31,13 +31,14 @@ class ExpressionTest extends TestCase
 
     public function testSimpleTernary()
     {
+        $n = 16;
         $poeExpression = new Expression("x=n > 6 ? 1 : 2;");
-        $variables = $poeExpression->eval(16);
-        $this->assertEquals(1, $variables['x']);
+        $variables = $poeExpression->eval($n);
+        $this->assertEquals($n > 6 ? 1 : 2, $variables['x']);
 
         $poeExpression = new Expression("x=n < 6 ? 1 : 2;");
-        $variables = $poeExpression->eval(16);
-        $this->assertEquals(2, $variables['x']);
+        $variables = $poeExpression->eval($n);
+        $this->assertEquals($n < 6 ? 1 : 2, $variables['x']);
     }
 
     public function testParentheses()

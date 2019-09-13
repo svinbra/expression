@@ -37,9 +37,13 @@ fi
 SCRIPT
 
 Vagrant.configure('2') do |config|
+  if Vagrant.has_plugin?("vagrant-vbguest")
+    config.vbguest.auto_update = false  
+  end
+
   config.vm.box = 'bento/ubuntu-18.04'
   config.vm.synced_folder '.', '/vagrant'
- config.vm.provision 'shell', inline: @script
+  config.vm.provision 'shell', inline: @script
 
   config.vm.provider "virtualbox" do |vb|
     vb.customize ["modifyvm", :id, "--memory", "2048"]
