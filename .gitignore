@@ -1,0 +1,9 @@
+.vagrant
+vendor/
+.idea/
+coverage/
+
+.runme
+.phpunit.result.cache
+clover.xml
+testdox.html

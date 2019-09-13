@@ -1,2 +1,2 @@
 # expression
-Small php library to generate math expressions
+Small php library to solve math expressions
