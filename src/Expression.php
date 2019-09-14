@@ -7,23 +7,17 @@ use Expression\AST\ASTIdentifier;
 use Expression\AST\ASTLiteral;
 use Expression\AST\ASTNode;
 use Expression\AST\ASTBinaryOperator;
+use phpDocumentor\Reflection\DocBlock\Tags\Param;
 
-//define('DEBUG', 1);
 
 class Expression
 {
     /** @var \Expression\Lexer */
     private $lexer;
-    /** @var string $expression */
-    private $expression;
-    /** @var int */
-    private $column;
-    /** @var int */
-    private $expressionLength;
     /** @var \Expression\Stack */
-    public $expressionStack;
+    private $expressionStack;
     /** @var \Expression\Stack */
-    public $operatorStack;
+    private $operatorStack;
     /** @var array */
     private $variables = [];
     /** @var array */
@@ -57,7 +51,7 @@ class Expression
      */
     public function eval(int $n): array
     {
-        $this->variables['n'] = $n;
+        $this->variables['$n'] = $n;
 
         /** @var \Expression\AST\ASTNode $declaration */
         foreach ($this->declarations as $declaration) {
@@ -95,6 +89,8 @@ class Expression
 
                     $node = new ASTDeclaration($leftNode, $rightNode);
                     $root[] = $node;
+                } else {
+                    $this->error('Expected assignment');
                 }
             } else {
                 $this->error('Expected identifier');
@@ -144,7 +140,7 @@ class Expression
                         $this->operatorStack->size() > 0 &&
                         !($operator = $this->operatorStack->peek())->ofType(Lexer::OPEN_BRACKET)
                     ) {
-                        $this->pushOperatorOnExpressionStack();
+                        $this->pushBinaryOperatorOnExpressionStack();
                         $pushedToStack = true;
                     }
                     if (!$operator || !$operator->ofType(Lexer::OPEN_BRACKET)) {
@@ -184,7 +180,7 @@ class Expression
                         !$stackOperator->isRightAssociative() &&
                         !$stackOperator->ofType(Lexer::OPEN_BRACKET)
                     ) {
-                        $this->pushOperatorOnExpressionStack();
+                        $this->pushBinaryOperatorOnExpressionStack();
                         $stackOperator = $this->operatorStack->peek();
                     }
 
@@ -197,7 +193,7 @@ class Expression
         }
 
         while ($this->operatorStack->size() > 0) {
-            $this->pushOperatorOnExpressionStack();
+            $this->pushBinaryOperatorOnExpressionStack();
         }
 
         if (defined('DEBUG')) $this->printNode($this->expressionStack->peek());
@@ -205,14 +201,41 @@ class Expression
         return $this->expressionStack->pop();
     }
 
-    private function pushOperatorOnExpressionStack()
+    /**
+     * @throws \Expression\CompilerError
+     */
+    private function pushBinaryOperatorOnExpressionStack()
     {
         $operator = $this->operatorStack->pop();
 
-        $right = $this->expressionStack->pop();
-        $left = $this->expressionStack->pop();
-        $node = new ASTBinaryOperator($operator, $left, $right);
-        $this->expressionStack->push($node);
+        // NOTE(Johan): PHP has left associative ternaries for some strange reason, so lets
+        // do this complicated dance to be compatible with it.
+        if ($operator->ofType(Lexer::TERNARY_SEPARATOR)) {
+            if ($this->operatorStack->size() >= 1) {
+                $operator2 = $this->operatorStack->pop();
+                if ($operator2->ofType(Lexer::TERNARY)) {
+                    if ($this->expressionStack->size() >= 3) {
+                        $right = $this->expressionStack->pop();
+                        $left = $this->expressionStack->pop();
+                        $expression = $this->expressionStack->pop();
+                        $ternarySeparator = new ASTBinaryOperator($operator, $left, $right);
+                        $ternary = new ASTBinaryOperator($operator2, $expression, $ternarySeparator);
+                        $this->expressionStack->push($ternary);
+                    } else {
+                        $this->error("Incorrectly defined ternary");
+                    }
+                } else {
+                    $this->error("Expected ternary operator");
+                }
+            }
+        } elseif ($this->expressionStack->size() >= 2) {
+            $right = $this->expressionStack->pop();
+            $left = $this->expressionStack->pop();
+            $node = new ASTBinaryOperator($operator, $left, $right);
+            $this->expressionStack->push($node);
+        } else {
+            $this->error("Expected two operands");
+        }
     }
 
     /**
@@ -274,10 +297,10 @@ class Expression
                     $value = (int)($leftNode->value <= $rightNode->value);
                     break;
                 case Lexer::EQUAL:
-                    $value = (int)($leftNode->value === $rightNode->value);
+                    $value = (int)($leftNode->value == $rightNode->value);
                     break;
                 case Lexer::NOT_EQUAL:
-                    $value = (int)($leftNode->value !== $rightNode->value);
+                    $value = (int)($leftNode->value != $rightNode->value);
                     break;
                 case Lexer::LOGIC_AND:
                     $value = (int)($leftNode->value && $rightNode->value);
