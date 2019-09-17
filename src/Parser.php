@@ -8,9 +8,9 @@ use Expression\AST\ASTLiteral;
 use Expression\AST\ASTNode;
 use Expression\AST\ASTBinaryOperator;
 
-class Expression
+class Parser
 {
-    /** @var \Expression\Lexer2 */
+    /** @var \Expression\Lexer */
     private $lexer;
     /** @var \Expression\Stack */
     private $expressionStack;
@@ -22,15 +22,15 @@ class Expression
     private $declarations = [];
 
     /**
-     * PoExpressionEngine constructor.
+     * Parser constructor.
      *
      * @param string $expression
      *
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     public function __construct(string $expression)
     {
-        $this->lexer = new Lexer2($expression);
+        $this->lexer = new Lexer($expression);
 
         $this->expressionStack = new Stack();
         $this->operatorStack = new Stack();
@@ -45,7 +45,7 @@ class Expression
      * @param int $n
      *
      * @return array
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     public function eval(int $n): array
     {
@@ -63,7 +63,7 @@ class Expression
      * Compiles multiple expressions and stores them in an abstract syntax tree.
      *
      * @return array
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     private function compile(): array
     {
@@ -72,18 +72,18 @@ class Expression
         $this->variables['n'] = 0;
         $root = [];
 
-        while (!$this->lexer->isEmpty()) {
-            if ($this->lexer->expect(Lexer2::VARIABLE)) {
+        while ($this->lexer->haveTokens()) {
+            if ($this->lexer->expect(TokenType::VARIABLE)) {
                 $identifier = $this->lexer->eatToken();
-                if ($this->lexer->expect(Lexer2::ASSIGNMENT)) {
+                if ($this->lexer->expect(TokenType::ASSIGNMENT)) {
                     $this->lexer->eatToken();
                     $rightNode = $this->parseExpression();
-                    if ($this->lexer->expect(Lexer2::END_OF_STATEMENT)) {
+                    if ($this->lexer->expect(TokenType::END_OF_STATEMENT)) {
                         $this->lexer->eatToken();
                     } else {
                         $this->error("End of statement missing");
                     }
-                    $leftNode = new ASTIdentifier($identifier->string);
+                    $leftNode = new ASTIdentifier($identifier->value);
 
                     $node = new ASTDeclaration($leftNode, $rightNode);
                     $root[] = $node;
@@ -102,32 +102,32 @@ class Expression
      * those tokens are handled elsewhere.
      *
      * @return \Expression\AST\ASTNode
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     private function parseExpression(): ASTNode
     {
         $unknownToken = false;
 
-        while (!$this->lexer->isEmpty() && !$unknownToken) {
+        while ($this->lexer->haveTokens() && !$unknownToken) {
             $currentToken = $this->lexer->peekToken();
 
-            switch ($currentToken->type) {
-                case Lexer2::ASSIGNMENT:
+            switch ($currentToken->type()) {
+                case TokenType::ASSIGNMENT:
                     $this->error("Assignment not allowed here");
                     break;
 
-                case Lexer2::LITERAL:
+                case TokenType::NUMBER:
                     $node = new ASTLiteral($this->lexer->eatToken()->value);
                     $this->expressionStack->push($node);
                     break;
 
-                case Lexer2::VARIABLE:
+                case TokenType::VARIABLE:
                     $token = $this->lexer->eatToken();
-                    $node = new ASTIdentifier($token->string);
+                    $node = new ASTIdentifier($token->value);
                     $this->expressionStack->push($node);
                     break;
 
-                case Lexer2::CLOSE_BRACKET:
+                case TokenType::CLOSE_BRACKET:
                     // A closing bracket triggers a chain of pushes to the expression stack
                     // because whatever is inside the bracket overrides the precedence order of
                     // what surrounds it.
@@ -136,12 +136,12 @@ class Expression
                     $pushedToStack = false;
                     while (
                         $this->operatorStack->size() > 0 &&
-                        !($operator = $this->operatorStack->peek())->ofType(Lexer2::OPEN_BRACKET)
+                        !($operator = $this->operatorStack->peek())->ofType(TokenType::OPEN_BRACKET)
                     ) {
                         $this->pushBinaryOperatorOnExpressionStack();
                         $pushedToStack = true;
                     }
-                    if (!$operator || !$operator->ofType(Lexer2::OPEN_BRACKET)) {
+                    if (!$operator || !$operator->ofType(TokenType::OPEN_BRACKET)) {
                         $this->error("Expected open bracket before closing bracket");
                     }
                     if (!$pushedToStack) {
@@ -150,22 +150,22 @@ class Expression
                     $this->operatorStack->pop(); // OPEN_PARENTHESES
                     break;
 
-                case Lexer2::OPEN_BRACKET:
-                case Lexer2::MULTIPLICATION:
-                case Lexer2::DIVISION:
-                case Lexer2::MODULUS:
-                case Lexer2::ADDITION:
-                case Lexer2::SUBTRACTION:
-                case Lexer2::GREATER_THAN:
-                case Lexer2::LESS_THAN:
-                case Lexer2::GREATER_THAN_OR_EQUAL:
-                case Lexer2::LESS_THAN_OR_EQUAL:
-                case Lexer2::LOGIC_AND:
-                case Lexer2::LOGIC_OR:
-                case Lexer2::TERNARY:
-                case Lexer2::TERNARY_SEPARATOR:
-                case Lexer2::EQUAL:
-                case Lexer2::NOT_EQUAL:
+                case TokenType::OPEN_BRACKET:
+                case TokenType::MULTIPLICATION:
+                case TokenType::DIVISION:
+                case TokenType::MODULUS:
+                case TokenType::ADDITION:
+                case TokenType::SUBTRACTION:
+                case TokenType::GREATER_THAN:
+                case TokenType::LESS_THAN:
+                case TokenType::GREATER_THAN_OR_EQUAL:
+                case TokenType::LESS_THAN_OR_EQUAL:
+                case TokenType::LOGIC_AND:
+                case TokenType::LOGIC_OR:
+                case TokenType::TERNARY:
+                case TokenType::TERNARY_SEPARATOR:
+                case TokenType::EQUAL:
+                case TokenType::NOT_EQUAL:
                     $currentOperator = $this->lexer->eatToken();
                     $stackOperator = $this->operatorStack->peek();
 
@@ -176,7 +176,7 @@ class Expression
                         ($stackOperator->precedence() < $currentOperator->precedence() ||
                             $stackOperator->precedence() == $currentOperator->precedence()) &&
                         !$stackOperator->isRightAssociative() &&
-                        !$stackOperator->ofType(Lexer2::OPEN_BRACKET)
+                        !$stackOperator->ofType(TokenType::OPEN_BRACKET)
                     ) {
                         $this->pushBinaryOperatorOnExpressionStack();
                         $stackOperator = $this->operatorStack->peek();
@@ -200,7 +200,7 @@ class Expression
     }
 
     /**
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     private function pushBinaryOperatorOnExpressionStack()
     {
@@ -208,10 +208,10 @@ class Expression
 
         // NOTE(Johan): PHP has left associative ternaries for some strange reason, so lets
         // do this complicated dance to be compatible with it.
-        if ($operator->ofType(Lexer2::TERNARY_SEPARATOR)) {
+        if ($operator->ofType(TokenType::TERNARY_SEPARATOR)) {
             if ($this->operatorStack->size() >= 1) {
                 $operator2 = $this->operatorStack->pop();
-                if ($operator2->ofType(Lexer2::TERNARY)) {
+                if ($operator2->ofType(TokenType::TERNARY)) {
                     if ($this->expressionStack->size() >= 3) {
                         $right = $this->expressionStack->pop();
                         $left = $this->expressionStack->pop();
@@ -240,7 +240,7 @@ class Expression
      * @param \Expression\AST\ASTNode $node
      *
      * @return \Expression\AST\ASTNode
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     private function solveExpression(ASTNode $node): ASTNode
     {
@@ -254,7 +254,7 @@ class Expression
             } else {
                 $this->error("Identifier '{$node->name}' not declared");
             }
-        } elseif ($node->ofType(Lexer2::TERNARY)) {
+        } elseif ($node->ofType(TokenType::TERNARY)) {
             $leftNode = $this->solveExpression($node->leftNode);
             if ($leftNode->value > 0) {
                 $result = $this->solveExpression($node->rightNode->leftNode);
@@ -267,49 +267,47 @@ class Expression
 
             $value = 0;
             switch ($node->type) {
-                case Lexer2::ADDITION:
+                case TokenType::ADDITION:
                     $value = $leftNode->value + $rightNode->value;
                     break;
-                case Lexer2::SUBTRACTION:
+                case TokenType::SUBTRACTION:
                     $value = $leftNode->value - $rightNode->value;
                     break;
-                case Lexer2::MULTIPLICATION:
+                case TokenType::MULTIPLICATION:
                     $value = $leftNode->value * $rightNode->value;
                     break;
-                case Lexer2::DIVISION:
+                case TokenType::DIVISION:
                     $value = (int)$leftNode->value / $rightNode->value;
                     break;
-                case Lexer2::MODULUS:
+                case TokenType::MODULUS:
                     $value = $leftNode->value % $rightNode->value;
                     break;
-                case Lexer2::GREATER_THAN:
+                case TokenType::GREATER_THAN:
                     $value = (int)($leftNode->value > $rightNode->value);
                     break;
-                case Lexer2::LESS_THAN:
+                case TokenType::LESS_THAN:
                     $value = (int)($leftNode->value < $rightNode->value);
                     break;
-                case Lexer2::GREATER_THAN_OR_EQUAL:
+                case TokenType::GREATER_THAN_OR_EQUAL:
                     $value = (int)($leftNode->value >= $rightNode->value);
                     break;
-                case Lexer2::LESS_THAN_OR_EQUAL:
+                case TokenType::LESS_THAN_OR_EQUAL:
                     $value = (int)($leftNode->value <= $rightNode->value);
                     break;
-                case Lexer2::EQUAL:
+                case TokenType::EQUAL:
                     $value = (int)($leftNode->value == $rightNode->value);
                     break;
-                case Lexer2::NOT_EQUAL:
+                case TokenType::NOT_EQUAL:
                     $value = (int)($leftNode->value != $rightNode->value);
                     break;
-                case Lexer2::LOGIC_AND:
+                case TokenType::LOGIC_AND:
                     $value = (int)($leftNode->value && $rightNode->value);
                     break;
-                case Lexer2::LOGIC_OR:
+                case TokenType::LOGIC_OR:
                     $value = (int)($leftNode->value || $rightNode->value);
                     break;
                 default:
-                    $token = new Token2();
-                    $token->type = $node->type;
-                    $this->error("{$token} not allowed here");
+                    $this->error("{$node->value} not allowed here");
             }
 
             $result = new ASTLiteral($value);
@@ -322,10 +320,10 @@ class Expression
     private function printNode(ASTNode $node)
     {
         echo "<div style=\"margin-left: 50px;\">";
-        if ($node->type === Lexer2::LITERAL) {
+        if ($node->type === TokenType::NUMBER) {
             echo $node->value;
         } else {
-            $token = new Token2();
+            $token = new Token();
             $token->type = $node->type;
             echo $token;
             if ($node->leftNode) $this->printNode($node->leftNode);
@@ -337,10 +335,10 @@ class Expression
     /**
      * @param string $message
      *
-     * @throws \Expression\CompilerError
+     * @throws \Expression\CompilerException
      */
     private function error(string $message)
     {
-        throw new CompilerError("Error on column {$this->lexer->column}: $message" . substr($this->lexer->source, $this->lexer->column));
+        //throw new CompilerException(CompilerException::ERROR, "Error on column {$this->lexer->column}: $message" . substr($this->lexer->source, $this->lexer->column));
     }
 }

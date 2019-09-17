@@ -2,7 +2,7 @@
 
 namespace Expression\AST;
 
-use Expression\Token;
+use Expression\Token2;
 
 class ASTNode
 {
@@ -10,7 +10,7 @@ class ASTNode
     public $leftNode;
     /** @var \Expression\AST\ASTNode */
     public $rightNode;
-    /** @var Token */
+    /** @var Token2 */
     public $type;
     /** @var int */
     public $value;

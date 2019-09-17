@@ -5,28 +5,27 @@ namespace Expression;
 class Token
 {
     /** @var int */
-    public $type;
-    /** @var array */
-    public $typeInfo = [];
-    /** @var string */
-    public $string = '';
-    /** @var int */
-    public $value = 0;
+    private $typeInfo;
+    /** @var \Expression\Location */
+    public $location;
+    /** @var int|string|null */
+    public $value;
 
-    public function ofType(int $tokenType): bool
+    public function __construct(int $type, Location $location, $value = null)
     {
-        // Lets just use expect for now
-        return $this->type === $tokenType;
+        $tokenType = new TokenType();
+        $this->typeInfo = $tokenType->info($type);
+        $this->location = $location;
+        $this->value = $value;
+    }
+
+    public function type()
+    {
+        return $this->typeInfo['type'];
     }
 
     public function precedence(): int
     {
         return $this->typeInfo['precedence'];
     }
-
-    public function isRightAssociative(): bool
-    {
-        return $this->typeInfo['rightAssociative'];
-    }
 }
-

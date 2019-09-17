@@ -2,11 +2,11 @@
 
 namespace Expression\AST;
 
-use Expression\Token;
+use Expression\Token2;
 
 class ASTBinaryOperator extends ASTNode
 {
-    public function __construct(Token $operator, ASTNode $leftOperand, ASTNode $rightOperand)
+    public function __construct(Token2 $operator, ASTNode $leftOperand, ASTNode $rightOperand)
     {
         $this->type = $operator->type;
         $this->leftNode = $leftOperand;

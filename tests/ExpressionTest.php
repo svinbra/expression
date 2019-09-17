@@ -111,11 +111,4 @@ class ExpressionTest extends TestCase
         $variables = $poeExpression->eval($n);
         $this->assertEquals(($n==1 ? 0 : $n%10>=2 && $n%10<=4 && ($n%100<12 || $n%100>14) ? 1 : 2), $variables['$x']);
     }
-
-    public function testSomething()
-    {
-        $poeExpression = new Expression('$x = 2 == 2;');
-        $variables = $poeExpression->eval(0);
-        $this->assertEquals(1, $variables['$x']);
-    }
 }
